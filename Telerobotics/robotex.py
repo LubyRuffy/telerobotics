@@ -10,6 +10,10 @@ import math as m
 import wiringpi as wp
 from multiprocessing import Process, Value
 
+TOF_THRESHOLD=100				# Data below 100mm should be considered out of range
+OUT_OF_RANGE=1000				# If data is out of range set placeholder data - here, 1m distance
+
+
 forwardSpeedGain=1
 angleTurnGain=1
 hWeight
@@ -123,6 +127,13 @@ def wrapTo100(val):
 		return -100
 	return val
 	
+def wrap(val, minVal, maxVal):
+	if val<minVal:
+		return minVal
+	if val>maxVal:
+		return maxVal
+	return val
+	
 def tof_loop():
         ser=serial.Serial('/dev/ttyS0',9600,timeout=1)
         while 1:
@@ -131,7 +142,10 @@ def tof_loop():
                 words=data.split(",")
                 index=int(words[0])
                 val=float(words[1])
-                ls[index]=val
+		if val>TOF_THRESHOLD:
+                	ls[index]=val
+		else
+			ls[index]=OUT_OF_RANGE
                 data=""
 		
 
@@ -169,7 +183,7 @@ if __name__=='__main__':
 	
 		forwardDistance = ls[3]		# Free distance in front of car
 	
-		hWeight=1/forwardDistance	# How much horizontal distance affects turning
+		hWeight=float(wrap(forwardDistance,0,1000))/1000	# How much horizontal distance affects turning
 	
 		turningControl = (longestDistanceAngle*angleTurnGain)*(1-hWeight) + hDistance*hWeight
 		speedControl = forwardDistance*forwardSpeedGain
