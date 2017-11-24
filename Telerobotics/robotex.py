@@ -107,6 +107,17 @@ def setSpeed(speed):
 # Sets the turning rate. Between -100 and 100,  Positive is right, negative is left
 def turn(val)
     	wp.softPwmWrite(pinEngine,round((val+100)/2))
+	
+def tof_loop():
+        ser=serial.Serial('/dev/ttyS0',9600,timeout=1)
+        while 1:
+                while data=="":
+                        data=ser.readline()
+                words=data.split(",")
+                index=int(words[0])
+                val=float(words[1])
+                ls[index]=val
+                data=""
 
 
 
