@@ -86,7 +86,7 @@ def read_imuData():
 		mu=1
 		alpha=(1/(sig*(np.sqrt(2*np.pi))))*(np.exp(-1*((acc-mu)**2)/(2*(sig**2))))
 
-		r_now.value.=(r_gyr*alpha)+(r_acc*(1-alpha))
+		r_now.value=(r_gyr*alpha)+(r_acc*(1-alpha))
 		p_now.value=(p_gyr*alpha)+(p_acc*(1-alpha))
 
 		r_past=r_now.value
@@ -117,7 +117,7 @@ def setSpeed(speed):
     	wp.softPwmWrite(pinEngine,round((wrapTo100(speed)+100)/2))
 
 # Sets the turning rate. Between -100 and 100,  Positive is right, negative is left
-def turn(val)
+def turn(val):
     	wp.softPwmWrite(pinEngine,round((wrapTo100(val)+100)/2))
 	
 def wrapTo100(val):
