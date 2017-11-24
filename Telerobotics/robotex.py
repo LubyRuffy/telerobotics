@@ -10,6 +10,10 @@ import math as m
 import wiringpi as wp
 from multiprocessing import Process, Value
 
+forwardSpeedGain=1
+angleTurnGain=1
+hWeight
+
 r_now=Value('d',0.0)				# State variables shared between different threads
 p_now=Value('d',0.0)
 ls=Array('d',range(5))
@@ -106,11 +110,18 @@ def setupMotors(pEngine,pTurning):
 
 # Sets the engine speed. Between -100 and 100, negative values reverse.
 def setSpeed(speed):
-    	wp.softPwmWrite(pinEngine,round((speed+100)/2))
+    	wp.softPwmWrite(pinEngine,round((wrapTo100(speed)+100)/2))
 
 # Sets the turning rate. Between -100 and 100,  Positive is right, negative is left
 def turn(val)
-    	wp.softPwmWrite(pinEngine,round((val+100)/2))
+    	wp.softPwmWrite(pinEngine,round((wrapTo100(val)+100)/2))
+	
+def wrapTo100(val):
+	if val>100:
+		return 100
+	if val<-100:
+		return -100
+	return val
 	
 def tof_loop():
         ser=serial.Serial('/dev/ttyS0',9600,timeout=1)
@@ -122,7 +133,7 @@ def tof_loop():
                 val=float(words[1])
                 ls[index]=val
                 data=""
-
+		
 
 
 if __name__=='__main__':
@@ -130,7 +141,7 @@ if __name__=='__main__':
 #	print ser_readData()
 #	while 1:
 #		read_imuData()
-
+	setupMotors()
 	tof=Process(name='TOF_Loop',target=tof_loop)
 	imu=Process(name='IMU',target=read_imuData)
 	
@@ -139,5 +150,31 @@ if __name__=='__main__':
 	
 	tof.start()
 	imu.start()
+	
+	# First send a synchronisation signal to the controller circuit:
+	turn(0)
+	setSpeed(0)
+	time.sleep(3)
+	
+	
+	while 1:
+		hDistance = ls[4]-ls[0]		# Horizontal distance: keep this at 0
+	
+		longestDistanceIndex = 0	# Index of longest TOF distance measured
+		for i in range(4):
+			if ls[i]>ls[longestDistanceIndex]:
+				longestDistanceIndex=i
+	
+		longestDistanceAngle = (longestDistanceIndex*45)-90	# Angle to longest TOF measurement
+	
+		forwardDistance = ls[3]		# Free distance in front of car
+	
+		hWeight=1/forwardDistance	# How much horizontal distance affects turning
+	
+		turningControl = (longestDistanceAngle*angleTurnGain)*(1-hWeight) + hDistance*hWeight
+		speedControl = forwardDistance*forwardSpeedGain
+	
+		turn(turningControl)
+		setSpeed(speedControl)
 	
 
