@@ -4,24 +4,17 @@ from mpu6050 import mpu6050
 import serial
 import numpy as np
 import time
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from mpu6050 import mpu6050
 import math as m
 import wiringpi as wp
 from multiprocessing import Process, Value
 
-
-LPF_const=0.01					#Filter constant accel low pass filter
-Gpx=0						# Accel data in terms of G-Force
-Gpy=0
-Gpz=0
-r_past=0					#Previous roll angle
-p_past=0					#Previous pitch angle
-acc_past=0					#Previous accel magnitude
-Ts=1						#(NEEDS UPDATE!!!)Sample rate of the sensor 
+r_now=Value('d',0.0)				# State variables shared between different threads
+p_now=Value('d',0.0)
+ls=Array('d',range(5))
 
 
-t=time.time()
 mpu=mpu6050(0x68)
 
 pinEngine=11
@@ -50,42 +43,53 @@ def ser_readData():
 	return index,val,time.time()-t
 
 def read_imuData():
-	global mpu,LPF_const,Gpx,Gpy,Gpz,r_past,p_past,acc_past
-	accel_data=mpu.get_accel_data()			#Data acquisition in G-Force
-	gyro_data=mpu.get_gyro_data()
+	LPF_const=0.01					#Filter constant accel low pass filter
+	Gpx=0						# Accel data in terms of G-Force
+	Gpy=0
+	Gpz=0
+	r_past=0					#Previous roll angle
+	p_past=0					#Previous pitch angle
+	acc_past=0					#Previous accel magnitude
+	Ts=0						#(NEEDS UPDATE!!!)Sample rate of the sensor 
 
-	# Discrete time Low Pass Filter for accelerometer data
-	Gpx=LPF_const*accel_data['x']+(1-LPF_const)*Gpx
-	Gpy=LPF_const*accel_data['y']+(1-LPF_const)*Gpy
-	Gpz=LPF_const*accel_data['z']+(1-LPF_const)*Gpz
+	#global mpu,LPF_const,Gpx,Gpy,Gpz,r_past,p_past,acc_past
+	while 1:
+		t=time.time()
+		accel_data=mpu.get_accel_data()			#Data acquisition in G-Force
+		gyro_data=mpu.get_gyro_data()
 
-	#Convert Accel data into Roll and pitch angles
-	acc=np.sqrt(Gpx**2+Gpy**2+Gpz**2)
-	r_acc=np.rad2deg(m.atan2(Gpy,Gpz))
-	p_acc=np.rad2deg(m.atan2(-Gpx,np.sqrt(Gpy**2+Gpz**2)))
-	diff=acc-acc_past
-	acc_past=acc
+		# Discrete time Low Pass Filter for accelerometer data
+		Gpx=LPF_const*accel_data['x']+(1-LPF_const)*Gpx
+		Gpy=LPF_const*accel_data['y']+(1-LPF_const)*Gpy
+		Gpz=LPF_const*accel_data['z']+(1-LPF_const)*Gpz
 
-	# Convert gyro data to roll,pitch and yaw angles
-	r_gyr=r_past+(gyro_data['x']*Ts)
-	p_gyr=p_past+(gyro_data['y']*Ts)
+		#Convert Accel data into Roll and pitch angles
+		acc=np.sqrt(Gpx**2+Gpy**2+Gpz**2)
+		r_acc=np.rad2deg(m.atan2(Gpy,Gpz))
+		p_acc=np.rad2deg(m.atan2(-Gpx,np.sqrt(Gpy**2+Gpz**2)))
+		diff=acc-acc_past
+		acc_past=acc
 
-	sig=0.4								#Normal Distribution parameters
-	mu=1
-	alpha=(1/(sig*(np.sqrt(2*np.pi))))*(np.exp(-1*((acc-mu)**2)/(2*(sig**2))))
+		# Convert gyro data to roll,pitch and yaw angles
+		r_gyr=r_past+(gyro_data['x']*Ts)
+		p_gyr=p_past+(gyro_data['y']*Ts)
 
-	r_now=(r_gyr*alpha)+(r_acc*(1-alpha))
-	p_now=(p_gyr*alpha)+(p_acc*(1-alpha))
+		sig=0.4								#Normal Distribution parameters
+		mu=1
+		alpha=(1/(sig*(np.sqrt(2*np.pi))))*(np.exp(-1*((acc-mu)**2)/(2*(sig**2))))
 
-	r_past=r_now
-	p_past=p_now
+		r_now.value.=(r_gyr*alpha)+(r_acc*(1-alpha))
+		p_now.value=(p_gyr*alpha)+(p_acc*(1-alpha))
 
+		r_past=r_now.value
+		p_past=p_now.value
+		Ts=time.time()-t
 
-	print "r_acc=",r_acc
-	print "p_acc=",p_acc
+		print "r_acc=",r_acc
+		print "p_acc=",p_acc
 
-	print "roll=",r_now
-	print "pitch=",p_now
+		print "roll=",r_now
+		print "pitch=",p_now
 
 # Setup function. PWM duty cycle is between 0 and 100, so 50 is standstill
 
@@ -124,7 +128,16 @@ def tof_loop():
 if __name__=='__main__':
 #	ser_init()
 #	print ser_readData()
-	while 1:
-		read_imuData()
+#	while 1:
+#		read_imuData()
 
+	tof=Process(name='TOF_Loop',target=tof_loop)
+	imu=Process(name='IMU',target=read_imuData)
+	
+	tof.daemon=True
+	imu.daemon=True
+	
+	tof.start()
+	imu.start()
+	
 
